@@ -132,6 +132,11 @@
     </div>
   </div>
 
+  <div id="resumeOrderBanner" style="display: none; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 24px; background: #FFF3E6; border-bottom: 1px solid #FFD9AE; flex-wrap: wrap;">
+    <div style="font-size: 14px; color: #0B4A48;" id="resumeOrderText"></div>
+    <button type="button" id="resumeOrderBtn" style="padding: 9px 18px; border-radius: 8px; background: #0F6E6B; color: #FFFFFF; border: none; font-weight: 600; font-size: 13px; cursor: pointer; white-space: nowrap;">View order</button>
+  </div>
+
   <div style="position: relative; overflow: hidden; display: flex; align-items: flex-start; justify-content: space-between; gap: clamp(20px, 4vw, 56px); padding: clamp(40px, 7vw, 76px) clamp(20px, 4vw, 64px) clamp(40px, 7vw, 88px); background: #0B4A48; flex-wrap: nowrap;">
 
     <div style="position: relative; z-index: 1; flex: 1 1 260px; max-width: 600px; min-width: 0; padding-top: 20px; display: flex; flex-direction: column; gap: 18px;">
@@ -1209,6 +1214,7 @@
   // that happens to be open in the same browser tab.
   let customerOrderUnsub = null;
   let staffOrdersUnsub = null;
+  let pendingResumeOrder = null;
 
   function escapeHtml(str) {
     return String(str == null ? '' : str)
@@ -1295,6 +1301,83 @@
         showToast('✓ Your quote is ready — RM ' + (data.courierCharge + data.permitGst).toFixed(2));
       }
     });
+  }
+
+  // Runs right after someone logs in (fresh login, or auto-restored on page load) so a
+  // customer who is simply back on the home page — not mid-wizard, maybe on a different
+  // device — can still find and finish an order that's awaiting a quote or ready to pay.
+  function hideResumeOrderBanner() {
+    const el = document.getElementById('resumeOrderBanner');
+    if (el) el.style.display = 'none';
+    pendingResumeOrder = null;
+  }
+
+  function showResumeOrderBanner(orderId, data) {
+    const el = document.getElementById('resumeOrderBanner');
+    const textEl = document.getElementById('resumeOrderText');
+    if (!el || !textEl) return;
+    const reqNo = data.requestNumber || orderId.slice(0, 6);
+    if (data.status === 'quoted' && data.courierCharge != null) {
+      const total = (data.courierCharge + (data.permitGst || 0)).toFixed(2);
+      textEl.textContent = 'Your quote for order #' + reqNo + ' is ready — RM ' + total + '. Tap to review and pay.';
+    } else {
+      textEl.textContent = "Your quote request #" + reqNo + " is being prepared — we'll let you know once it's priced.";
+    }
+    el.style.display = 'flex';
+    pendingResumeOrder = { id: orderId, data: data };
+  }
+
+  function resumeOrder(orderId, data) {
+    state.currentOrderId = orderId;
+    state.route = data.route === 'Singapore → Malaysia' ? 'sg-my' : 'my-sg';
+    const sizeKeyByLabel = { 'Document / Small': 'small', 'Parcel / Medium': 'medium', 'Bulky / Large': 'large' };
+    state.size = sizeKeyByLabel[data.packageSize] || 'medium';
+    document.getElementById('pname').value = data.pickupContact || '';
+    document.getElementById('paddr').value = data.pickupAddress || '';
+    document.getElementById('pphone').value = data.pickupPhone || '';
+    document.getElementById('dname').value = data.dropoffContact || '';
+    document.getElementById('daddr').value = data.dropoffAddress || '';
+    document.getElementById('dphone').value = data.dropoffPhone || '';
+    document.getElementById('cartons').value = data.cartons || '1';
+    document.getElementById('fragile').checked = !!data.fragile;
+    document.getElementById('bdate').value = data.scheduleDate || '';
+    document.getElementById('btime').value = data.scheduleTime || '';
+    document.getElementById('reqNumber').textContent = data.requestNumber || '';
+    renderHome();
+    renderStep1();
+    fillQuoteSummary();
+    listenToOrder(orderId);
+    if (data.status === 'quoted' && data.courierCharge != null) {
+      applyQuoteLocally(data.courierCharge, data.permitGst || 0);
+      goToStep(3);
+    } else {
+      goToStep(2);
+    }
+    showTop('topWizard');
+    hideResumeOrderBanner();
+  }
+
+  // One-time lookup (not a live listener) for the customer's own most recent order
+  // that's still awaiting a quote or ready to pay — run right after login.
+  async function checkForCustomerOrder() {
+    if (!currentUser || !currentUser.uid || !window.fbDb) return;
+    try {
+      const { db, collection, query, where, getDocs } = window.fbDb;
+      const q = query(collection(db, 'orders'), where('customerUid', '==', currentUser.uid));
+      const snap = await getDocs(q);
+      if (snap.empty) { hideResumeOrderBanner(); return; }
+      let latest = null;
+      snap.forEach((docSnap) => {
+        const data = docSnap.data();
+        if (data.status !== 'pending_quote' && data.status !== 'quoted') return;
+        const t = (data.createdAt && data.createdAt.toMillis) ? data.createdAt.toMillis() : 0;
+        if (!latest || t >= latest.t) latest = { id: docSnap.id, data: data, t: t };
+      });
+      if (!latest) { hideResumeOrderBanner(); return; }
+      showResumeOrderBanner(latest.id, latest.data);
+    } catch (err) {
+      console.error('checkForCustomerOrder failed', err);
+    }
   }
 
   // ===== Staff dashboard: list every pending order and let staff price + WhatsApp it =====
@@ -1668,6 +1751,7 @@
     document.getElementById('mmMenuLoginPrompt').style.display = 'none';
     document.getElementById('mmMenuLoggedInBadge').style.display = 'flex';
     updateStaffDashboardGateUI();
+    checkForCustomerOrder();
   }
 
   function setLoggedOut() {
@@ -1682,6 +1766,7 @@
     document.getElementById('mmMenuLoginPrompt').style.display = 'flex';
     document.getElementById('mmMenuLoggedInBadge').style.display = 'none';
     updateStaffDashboardGateUI();
+    hideResumeOrderBanner();
   }
 
   // Called by the Firebase bridge script whenever the signed-in user changes --
@@ -2406,6 +2491,10 @@
     showTop('topStaffDashboard');
     updateStaffDashboardGateUI();
   }
+
+  document.getElementById('resumeOrderBtn').addEventListener('click', () => {
+    if (pendingResumeOrder) resumeOrder(pendingResumeOrder.id, pendingResumeOrder.data);
+  });
 </script>
 
 <!-- ===== Firebase: real accounts + database (added so sign-ups/orders are real,   ===== -->
@@ -2417,7 +2506,7 @@
     signOut, onAuthStateChanged, updateProfile
   } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
   import {
-    getFirestore, collection, addDoc, doc, updateDoc, getDoc, onSnapshot,
+    getFirestore, collection, addDoc, doc, updateDoc, getDoc, getDocs, onSnapshot,
     query, where, orderBy, serverTimestamp
   } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -2445,7 +2534,7 @@
     }
   };
 
-  window.fbDb = { db, collection, addDoc, doc, updateDoc, getDoc, onSnapshot, query, where, orderBy, serverTimestamp };
+  window.fbDb = { db, collection, addDoc, doc, updateDoc, getDoc, getDocs, onSnapshot, query, where, orderBy, serverTimestamp };
 
   // Auto-restore login if this browser already has a session (e.g. returning visitor).
   window.fbAuth.onChange((user) => {
