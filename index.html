@@ -1086,12 +1086,11 @@
             <div style="width: 48px; height: 48px; border-radius: 999px; background: #0F6E6B; color: #FFFFFF; display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 16px;">[DL]</div>
             <div>
               <div id="driverNameDisplay" style="font-weight: 600; font-size: 15px;">Assigning driver…</div>
-              <div style="font-size: 13px; color: #5B5F66;">Van · [Plate XXX 1234]</div>
             </div>
           </div>
           <div id="driverEtaLine" style="display: flex; align-items: center; gap: 8px; font-size: 13px; color: #5B5F66;">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0F6E6B" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 3"></path></svg>
-            <span id="driverEtaText">Picked up — heading your way, arriving in ~[45] min</span>
+            <span id="driverEtaText">Picked up — heading your way</span>
           </div>
           <div style="display: flex; gap: 10px;">
             <a href="tel:+60183531414" style="flex-grow: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 11px; border-radius: 10px; border: 1px solid #E4E0D6; background: #FFFFFF; font-weight: 600; font-size: 14px; cursor: pointer; color: #12151B; text-decoration: none; box-sizing: border-box;">
@@ -1119,17 +1118,20 @@
           <div style="display: flex; justify-content: space-between;"><span style="color: #5B5F66;">Total paid</span><span id="trackingTotalPaid" style="font-weight: 600;">RM —</span></div>
         </div>
 
-        <div id="customerUpdatePanel" style="background: #FFF8F1; border: 1px dashed #FF8A3D; border-radius: 16px; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; gap: 10px;">
+        <div id="customerUpdatePanel" style="background: #FFF8F1; border: 1px dashed #FF8A3D; border-radius: 16px; padding: 20px; box-sizing: border-box; display: none; flex-direction: column; gap: 10px;">
           <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
             <span style="font-size: 11px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #B85A1E;">Customer update</span>
             <span id="customerUpdateTarget" style="font-size: 11px; color: #5B5F66;"></span>
           </div>
           <div id="customerUpdateText" style="font-size: 12.5px; color: #17211F; line-height: 1.5; background: #FFFFFF; border: 1px solid #F5D9C4; border-radius: 10px; padding: 12px;"></div>
-          <button type="button" id="btnCopyCustomerUpdate" style="padding: 10px; border-radius: 9px; background: #0B4A48; color: #FFFFFF; border: none; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px; cursor: pointer;">Copy update for customer</button>
-          <div style="font-size: 11px; color: #5B5F66; line-height: 1.5;">Demo mode: "Driver assigned" and "Delivered" now auto-send an email — to your own inbox for this test, since there's no backend yet to email each customer directly. You can also copy this message to send yourself via WhatsApp or email.</div>
+          <div style="display: flex; gap: 8px;">
+            <button type="button" id="btnWhatsAppCustomerUpdate" style="flex-grow: 1; padding: 10px; border-radius: 9px; background: #0F6E6B; color: #FFFFFF; border: none; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px; cursor: pointer;">Send via WhatsApp</button>
+            <button type="button" id="btnCopyCustomerUpdate" style="flex-grow: 1; padding: 10px; border-radius: 9px; background: #0B4A48; color: #FFFFFF; border: none; font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 13px; cursor: pointer;">Copy update</button>
+          </div>
+          <div style="font-size: 11px; color: #5B5F66; line-height: 1.5;">Note: "Driver assigned" and "Delivered" also send an email to your own inbox (there's no backend yet to email the customer directly) — use "Send via WhatsApp" above to open WhatsApp with this message ready to send to the customer's phone, or "Copy update" to paste it anywhere yourself.</div>
         </div>
 
-        <button type="button" id="btnRestart4" style="display: block; box-sizing: border-box; width: 100%; padding: 12px; color: #5B5F66; background: none; border: 1px solid #E4E0D6; border-radius: 10px; font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; font-size: 13px; text-align: center; cursor: pointer;">Start a new test booking</button>
+        <button type="button" id="btnRestart4" style="display: block; box-sizing: border-box; width: 100%; padding: 12px; color: #5B5F66; background: none; border: 1px solid #E4E0D6; border-radius: 10px; font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; font-size: 13px; text-align: center; cursor: pointer;">Book another delivery</button>
       </div>
     </div>
 
@@ -1165,9 +1167,12 @@
   const isStaffView = new URLSearchParams(window.location.search).has('staff');
   const adminStaffBoxEl = document.getElementById('adminStaffBox');
   const driverStaffBoxEl = document.getElementById('driverStaffBox');
+  const customerUpdatePanelEl = document.getElementById('customerUpdatePanel');
   if (!isStaffView) {
     if (adminStaffBoxEl) adminStaffBoxEl.style.display = 'none';
     if (driverStaffBoxEl) driverStaffBoxEl.style.display = 'none';
+  } else {
+    if (customerUpdatePanelEl) customerUpdatePanelEl.style.display = 'flex';
   }
 
   const STAFF_PASSCODE = 'teet2026'; // change this to whatever passcode you want staff to use
@@ -2398,8 +2403,8 @@
     document.getElementById('orderStatusLine').textContent = statusLines[state.deliveryStage];
 
     const etaTexts = {
-      2: 'Picked up — heading your way, arriving in ~[45] min',
-      3: 'On the way — arriving in ~[15] min'
+      2: 'Picked up — heading your way. We\'ll update you again once it\'s delivered.',
+      3: 'On the way — almost at the drop-off. We\'ll update you once it\'s delivered.'
     };
     if (state.deliveryStage < 4) {
       document.getElementById('driverEtaText').textContent = etaTexts[state.deliveryStage];
@@ -2484,6 +2489,18 @@
       fallbackCopyText(text);
       copied();
     }
+  });
+
+  document.getElementById('btnWhatsAppCustomerUpdate').addEventListener('click', () => {
+    const text = document.getElementById('customerUpdateText').textContent;
+    const phone = (document.getElementById('pphone').value || '').trim();
+    if (!phone) {
+      showToast('No phone number on this order — use "Copy update" instead.');
+      return;
+    }
+    const digits = phone.replace(/[^\d+]/g, '').replace(/^\+/, '');
+    const waUrl = 'https://wa.me/' + digits + '?text=' + encodeURIComponent(text);
+    window.open(waUrl, '_blank');
   });
 
   function fallbackCopyText(text) {
