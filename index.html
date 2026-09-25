@@ -81,16 +81,27 @@
 <div id="loginModalBackdrop" style="display: none; position: fixed; inset: 0; background: rgba(18,21,27,0.55); z-index: 998; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box;">
   <div style="background: #FFFFFF; border-radius: 16px; padding: 24px; width: 100%; max-width: 360px; box-sizing: border-box; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 32px 64px -20px rgba(6,12,30,0.5);">
     <div style="display: flex; align-items: center; justify-content: space-between;">
-      <span style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 18px;">Log in</span>
+      <span id="loginModalTitle" style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 18px;">Log in</span>
       <button type="button" id="loginModalClose" aria-label="Close" style="background: none; border: none; font-size: 20px; line-height: 1; cursor: pointer; color: #5B5F66;">&times;</button>
     </div>
-    <div style="font-size: 12.5px; color: #5B5F66; line-height: 1.5;">Demo mode — enter the email you signed up with (or any email) to log in. No password needed for this test.</div>
+    <div id="loginModalNameRow" style="display: none; flex-direction: column; gap: 6px;">
+      <label for="loginName" style="font-size: 12px; font-weight: 600; color: #5B5F66;">Full name</label>
+      <input id="loginName" type="text" placeholder="Your name" style="padding: 12px 14px; border-radius: 10px; border: 1px solid #E4E0D6; font-size: 14px; box-sizing: border-box; width: 100%;">
+    </div>
     <div style="display: flex; flex-direction: column; gap: 6px;">
       <label for="loginEmail" style="font-size: 12px; font-weight: 600; color: #5B5F66;">Email</label>
       <input id="loginEmail" type="text" placeholder="you@email.com" style="padding: 12px 14px; border-radius: 10px; border: 1px solid #E4E0D6; font-size: 14px; box-sizing: border-box; width: 100%;">
     </div>
+    <div style="display: flex; flex-direction: column; gap: 6px;">
+      <label for="loginPassword" style="font-size: 12px; font-weight: 600; color: #5B5F66;">Password</label>
+      <input id="loginPassword" type="password" placeholder="At least 6 characters" style="padding: 12px 14px; border-radius: 10px; border: 1px solid #E4E0D6; font-size: 14px; box-sizing: border-box; width: 100%;">
+    </div>
+    <div id="loginModalError" style="display: none; font-size: 12px; color: #E0533D;"></div>
     <button type="button" id="loginSubmitBtn" style="width: 100%; padding: 12px; border-radius: 9px; background: #0F6E6B; color: #FFFFFF; border: none; font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; font-size: 14px; cursor: pointer; box-sizing: border-box;">Log in</button>
-    <div style="font-size: 12.5px; color: #5B5F66; text-align: center;">No account yet? <a href="#" id="loginToSignupLink" style="font-weight: 600;">Sign up instead</a></div>
+    <div style="font-size: 12.5px; color: #5B5F66; text-align: center;">
+      <span id="loginModalToSignup">No account yet? <a href="#" id="loginToSignupLink" style="font-weight: 600;">Sign up instead</a></span>
+      <span id="loginModalToLogin" style="display: none;">Already have an account? <a href="#" id="loginToLoginLink" style="font-weight: 600;">Log in instead</a></span>
+    </div>
   </div>
 </div>
 
@@ -173,7 +184,12 @@
             <input id="hAcctEmail" type="text" placeholder="you@email.com" style="padding: 11px 13px; border-radius: 9px; border: 1px solid #E4E0D6; font-size: 13px; box-sizing: border-box; width: 100%;">
           </div>
         </div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label for="hAcctPassword" style="font-size: 12px; font-weight: 600; color: #5B5F66;">Password</label>
+          <input id="hAcctPassword" type="password" placeholder="At least 6 characters" style="padding: 11px 13px; border-radius: 9px; border: 1px solid #E4E0D6; font-size: 13px; box-sizing: border-box; width: 100%;">
+        </div>
         <button type="button" id="hAcctSignupBtn" style="width: 100%; padding: 11px; border-radius: 9px; background: #0F6E6B; color: #FFFFFF; border: none; font-family: 'IBM Plex Sans', sans-serif; font-weight: 600; font-size: 13px; cursor: pointer; box-sizing: border-box;">Sign up</button>
+        <div id="hAcctSignupError" style="display: none; font-size: 12px; color: #E0533D;"></div>
         <div id="hAcctSignupMsg" style="display: none; font-size: 12px; color: #0F6E6B; font-weight: 600;">✓ Account created — you're signed in.</div>
       </div>
 
@@ -806,19 +822,29 @@
             <span style="padding: 3px 9px; border-radius: 999px; background: #FF8A3D; color: #0B4A48; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;">Staff only</span>
             <span style="font-size: 13px; color: #5B5F66;">Not visible to the customer</span>
           </div>
-          <div style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 15px;">Enter the quoted price</div>
-          <div style="display: flex; gap: 12px; flex-wrap: wrap;">
-            <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 6px; min-width: 140px;">
-              <label for="adminCourier" style="font-size: 12px; font-weight: 600; color: #5B5F66;">Courier charge (RM)</label>
-              <input id="adminCourier" type="number" step="0.01" min="0" placeholder="0.00" style="padding: 11px 13px; border-radius: 9px; border: 1px solid #E4E0D6; font-size: 14px; box-sizing: border-box; width: 100%;">
+          <div id="adminStaffGate" style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="font-size: 13px; color: #5B5F66;">Enter the staff passcode to view or set the price.</div>
+            <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+              <input id="adminStaffPasscode" type="password" placeholder="Staff passcode" style="flex-grow: 1; min-width: 140px; padding: 10px 12px; border-radius: 9px; border: 1px solid #E4E0D6; font-size: 14px; box-sizing: border-box;">
+              <button type="button" id="adminStaffUnlockBtn" style="padding: 10px 18px; border-radius: 9px; background: #0B4A48; color: #FFFFFF; border: none; font-weight: 600; font-size: 13px; cursor: pointer;">Unlock</button>
             </div>
-            <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 6px; min-width: 140px;">
-              <label for="adminPermit" style="font-size: 12px; font-weight: 600; color: #5B5F66;">Permit &amp; GST (RM)</label>
-              <input id="adminPermit" type="number" step="0.01" min="0" placeholder="0.00" style="padding: 11px 13px; border-radius: 9px; border: 1px solid #E4E0D6; font-size: 14px; box-sizing: border-box; width: 100%;">
-            </div>
+            <div id="adminStaffError" style="display: none; font-size: 12px; color: #E0533D;">Incorrect passcode.</div>
           </div>
-          <button type="button" id="adminSetPriceBtn" style="width: 100%; padding: 12px; border-radius: 9px; background: #0B4A48; color: #FFFFFF; border: none; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 14px; cursor: pointer; box-sizing: border-box;">Save &amp; send quote to customer</button>
-          <div id="adminPriceStatus" style="display: none; font-size: 12px; color: #0F6E6B; font-weight: 600;">✓ Quote sent — the customer now sees this price on the payment page.</div>
+          <div id="adminStaffContent" style="display: none; flex-direction: column; gap: 12px;">
+            <div style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 15px;">Enter the quoted price</div>
+            <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+              <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 6px; min-width: 140px;">
+                <label for="adminCourier" style="font-size: 12px; font-weight: 600; color: #5B5F66;">Courier charge (RM)</label>
+                <input id="adminCourier" type="number" step="0.01" min="0" placeholder="0.00" style="padding: 11px 13px; border-radius: 9px; border: 1px solid #E4E0D6; font-size: 14px; box-sizing: border-box; width: 100%;">
+              </div>
+              <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 6px; min-width: 140px;">
+                <label for="adminPermit" style="font-size: 12px; font-weight: 600; color: #5B5F66;">Permit &amp; GST (RM)</label>
+                <input id="adminPermit" type="number" step="0.01" min="0" placeholder="0.00" style="padding: 11px 13px; border-radius: 9px; border: 1px solid #E4E0D6; font-size: 14px; box-sizing: border-box; width: 100%;">
+              </div>
+            </div>
+            <button type="button" id="adminSetPriceBtn" style="width: 100%; padding: 12px; border-radius: 9px; background: #0B4A48; color: #FFFFFF; border: none; font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 14px; cursor: pointer; box-sizing: border-box;">Save &amp; send quote to customer</button>
+            <div id="adminPriceStatus" style="display: none; font-size: 12px; color: #0F6E6B; font-weight: 600;">✓ Quote sent — the customer now sees this price on the payment page.</div>
+          </div>
         </div>
       </div>
 
@@ -976,7 +1002,15 @@
           <span style="padding: 3px 9px; border-radius: 999px; background: #FF8A3D; color: #0B4A48; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;">Staff only</span>
           <span style="font-size: 13px; color: #5B5F66;">Not visible to the customer</span>
         </div>
-        <div style="display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;">
+        <div id="driverStaffGate" style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="font-size: 13px; color: #5B5F66;">Enter the staff passcode to assign a driver or update status.</div>
+          <div style="display: flex; gap: 8px; flex-wrap: wrap;">
+            <input id="driverStaffPasscode" type="password" placeholder="Staff passcode" style="flex-grow: 1; min-width: 140px; padding: 10px 12px; border-radius: 9px; border: 1px solid #E4E0D6; font-size: 14px; box-sizing: border-box;">
+            <button type="button" id="driverStaffUnlockBtn" style="padding: 10px 18px; border-radius: 9px; background: #0B4A48; color: #FFFFFF; border: none; font-weight: 600; font-size: 13px; cursor: pointer;">Unlock</button>
+          </div>
+          <div id="driverStaffError" style="display: none; font-size: 12px; color: #E0533D;">Incorrect passcode.</div>
+        </div>
+        <div id="driverStaffContent" style="display: none; gap: 12px; flex-wrap: wrap; align-items: flex-end;">
           <div style="flex-grow: 1; display: flex; flex-direction: column; gap: 6px; min-width: 160px;">
             <label for="staffDriverName" style="font-size: 12px; font-weight: 600; color: #5B5F66;">Driver name</label>
             <input id="staffDriverName" type="text" placeholder="e.g. Ahmad bin Yusof" style="padding: 10px 12px; border-radius: 9px; border: 1px solid #E4E0D6; font-size: 14px; box-sizing: border-box; width: 100%;">
@@ -1074,6 +1108,42 @@
     deliveryStage: 2, // 2 = Picked up, 3 = On the way, 4 = Delivered
     hasActiveOrder: false
   };
+
+  // ===== Staff-only access gate (client-side only — a real staff login/backend =====
+  // ===== should replace this before this site is used with real customers) =====
+  const STAFF_PASSCODE = 'teet2026'; // change this to whatever passcode you want staff to use
+  let staffUnlocked = false;
+
+  function revealStaffPanels() {
+    staffUnlocked = true;
+    document.getElementById('adminStaffGate').style.display = 'none';
+    document.getElementById('adminStaffContent').style.display = 'flex';
+    document.getElementById('driverStaffGate').style.display = 'none';
+    document.getElementById('driverStaffContent').style.display = 'flex';
+  }
+
+  function tryUnlockStaff(inputId, errorId) {
+    const val = document.getElementById(inputId).value.trim();
+    if (val === STAFF_PASSCODE) {
+      document.getElementById(errorId).style.display = 'none';
+      revealStaffPanels();
+    } else {
+      document.getElementById(errorId).style.display = 'block';
+    }
+  }
+
+  document.getElementById('adminStaffUnlockBtn').addEventListener('click', () => {
+    tryUnlockStaff('adminStaffPasscode', 'adminStaffError');
+  });
+  document.getElementById('adminStaffPasscode').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') tryUnlockStaff('adminStaffPasscode', 'adminStaffError');
+  });
+  document.getElementById('driverStaffUnlockBtn').addEventListener('click', () => {
+    tryUnlockStaff('driverStaffPasscode', 'driverStaffError');
+  });
+  document.getElementById('driverStaffPasscode').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') tryUnlockStaff('driverStaffPasscode', 'driverStaffError');
+  });
 
   function updateTrackNavAccess() {
     const navLink = document.getElementById('navTrackOrder');
@@ -1229,48 +1299,74 @@
     }
   }
 
+  function friendlyAuthError(err) {
+    const code = err && err.code ? err.code : '';
+    const map = {
+      'auth/email-already-in-use': 'That email already has an account — try logging in instead.',
+      'auth/invalid-email': 'That email address doesn\'t look right.',
+      'auth/weak-password': 'Password needs to be at least 6 characters.',
+      'auth/user-not-found': 'No account found with that email — sign up first.',
+      'auth/wrong-password': 'Wrong password — try again.',
+      'auth/invalid-credential': 'Wrong email or password — try again.',
+      'auth/too-many-requests': 'Too many attempts — please wait a moment and try again.',
+      'auth/network-request-failed': 'Couldn\'t reach the server — check your connection and try again.'
+    };
+    return map[code] || (err && err.message) || 'Something went wrong — please try again.';
+  }
+
   document.getElementById('hAcctSignupBtn').addEventListener('click', async () => {
     const nameField = document.getElementById('hAcctName');
     const emailField = document.getElementById('hAcctEmail');
+    const passwordField = document.getElementById('hAcctPassword');
     const btn = document.getElementById('hAcctSignupBtn');
-    if (!nameField.value.trim() || !emailField.value.trim()) {
+    const errorEl = document.getElementById('hAcctSignupError');
+    errorEl.style.display = 'none';
+    if (!nameField.value.trim() || !emailField.value.trim() || !passwordField.value) {
       nameField.style.borderColor = nameField.value.trim() ? '#E4E0D6' : '#E0533D';
       emailField.style.borderColor = emailField.value.trim() ? '#E4E0D6' : '#E0533D';
+      passwordField.style.borderColor = passwordField.value ? '#E4E0D6' : '#E0533D';
+      return;
+    }
+    if (!window.fbAuth) {
+      errorEl.textContent = 'Still connecting to the server — please try again in a second.';
+      errorEl.style.display = 'block';
       return;
     }
     nameField.style.borderColor = '#E4E0D6';
     emailField.style.borderColor = '#E4E0D6';
+    passwordField.style.borderColor = '#E4E0D6';
 
+    const originalText = btn.textContent;
     btn.textContent = 'Signing up…';
     btn.disabled = true;
 
-    const result = await submitToFormSubmit(SIGNUP_EMAIL_ADDRESS, {
-      _subject: 'New sign-up — TEET Xpress website',
-      name: nameField.value.trim(),
-      email: emailField.value.trim()
-    });
+    try {
+      await window.fbAuth.signUp(emailField.value.trim(), passwordField.value, nameField.value.trim());
+      btn.textContent = '✓ Signed up';
+      btn.style.background = '#5B5F66';
+      document.getElementById('hAcctSignupMsg').style.display = 'block';
+      setLoggedIn(nameField.value.trim(), emailField.value.trim());
 
-    btn.textContent = '✓ Signed up';
-    btn.style.background = '#5B5F66';
-    document.getElementById('hAcctSignupMsg').style.display = 'block';
-    registerDemoAccount(nameField.value.trim(), emailField.value.trim());
-    setLoggedIn(nameField.value.trim(), emailField.value.trim());
-
-    if (result.ok) {
-      showToast('✓ Sign-up notification sent to our team');
-    } else {
-      showToast('Signed up, but the notification email failed: ' + result.error);
+      const result = await submitToFormSubmit(SIGNUP_EMAIL_ADDRESS, {
+        _subject: 'New sign-up — TEET Xpress website',
+        name: nameField.value.trim(),
+        email: emailField.value.trim()
+      });
+      if (result.ok) {
+        showToast('✓ Sign-up notification sent to our team');
+      } else {
+        showToast('Signed up, but the notification email failed: ' + result.error);
+      }
+    } catch (err) {
+      btn.textContent = originalText;
+      btn.disabled = false;
+      errorEl.textContent = friendlyAuthError(err);
+      errorEl.style.display = 'block';
     }
   });
 
-  // ===== Demo accounts & log in (no backend — accounts only exist for this browser tab) =====
-  const demoAccounts = [];
+  // ===== Real accounts via Firebase Authentication =====
   let currentUser = null;
-
-  function registerDemoAccount(name, email) {
-    const existing = demoAccounts.find(a => a.email.toLowerCase() === email.toLowerCase());
-    if (existing) { existing.name = name; } else { demoAccounts.push({ name, email }); }
-  }
 
   function setLoggedIn(name, email) {
     currentUser = { name: name || email.split('@')[0], email };
@@ -1303,17 +1399,55 @@
     document.getElementById('mmMenuLoggedInBadge').style.display = 'none';
   }
 
+  // Called by the Firebase bridge script whenever the signed-in user changes --
+  // this is what keeps a returning visitor logged in across page reloads.
+  window.onFirebaseUserChanged = function (user) {
+    if (!currentUser || currentUser.email !== user.email) {
+      setLoggedIn(user.displayName || '', user.email);
+    }
+  };
+  window.onFirebaseUserSignedOut = function () {
+    if (currentUser) setLoggedOut();
+  };
+
+  async function doLogout() {
+    if (window.fbAuth) {
+      try { await window.fbAuth.logOut(); } catch (err) { /* ignore */ }
+    }
+    setLoggedOut();
+    showToast('You have been logged out');
+  }
+
   document.querySelectorAll('.acctLogoutLink').forEach(link => {
     link.addEventListener('click', (e) => {
       e.preventDefault();
-      setLoggedOut();
-      showToast('You have been logged out');
+      doLogout();
     });
   });
 
-  function openLoginModal() {
+  // ===== Login modal: dual mode (log in / sign up) =====
+  let loginModalMode = 'login';
+
+  function setLoginModalMode(mode) {
+    loginModalMode = mode;
+    const isSignup = mode === 'signup';
+    document.getElementById('loginModalTitle').textContent = isSignup ? 'Sign up' : 'Log in';
+    document.getElementById('loginModalNameRow').style.display = isSignup ? 'flex' : 'none';
+    document.getElementById('loginSubmitBtn').textContent = isSignup ? 'Sign up' : 'Log in';
+    document.getElementById('loginModalToSignup').style.display = isSignup ? 'none' : 'inline';
+    document.getElementById('loginModalToLogin').style.display = isSignup ? 'inline' : 'none';
+    document.getElementById('loginModalError').style.display = 'none';
+  }
+
+  function openLoginModal(mode) {
+    setLoginModalMode(mode || 'login');
+    document.getElementById('loginName').value = '';
     document.getElementById('loginEmail').value = currentUser ? currentUser.email : '';
+    document.getElementById('loginPassword').value = '';
+    document.getElementById('loginName').style.borderColor = '#E4E0D6';
     document.getElementById('loginEmail').style.borderColor = '#E4E0D6';
+    document.getElementById('loginPassword').style.borderColor = '#E4E0D6';
+    document.getElementById('loginModalError').style.display = 'none';
     document.getElementById('loginModalBackdrop').style.display = 'flex';
     setTimeout(() => document.getElementById('loginEmail').focus(), 50);
   }
@@ -1327,39 +1461,76 @@
   });
   document.getElementById('loginModalClose').addEventListener('click', closeLoginModal);
 
-  document.getElementById('loginSubmitBtn').addEventListener('click', () => {
+  document.getElementById('loginSubmitBtn').addEventListener('click', async () => {
+    const nameField = document.getElementById('loginName');
     const emailField = document.getElementById('loginEmail');
+    const passwordField = document.getElementById('loginPassword');
+    const errorEl = document.getElementById('loginModalError');
+    errorEl.style.display = 'none';
+
+    const isSignup = loginModalMode === 'signup';
     const email = emailField.value.trim();
-    if (!email) {
-      emailField.style.borderColor = '#E0533D';
+    const password = passwordField.value;
+    const name = nameField.value.trim();
+
+    if (!email || !password || (isSignup && !name)) {
+      emailField.style.borderColor = email ? '#E4E0D6' : '#E0533D';
+      passwordField.style.borderColor = password ? '#E4E0D6' : '#E0533D';
+      if (isSignup) nameField.style.borderColor = name ? '#E4E0D6' : '#E0533D';
+      return;
+    }
+    if (!window.fbAuth) {
+      errorEl.textContent = 'Still connecting to the server — please try again in a second.';
+      errorEl.style.display = 'block';
       return;
     }
     emailField.style.borderColor = '#E4E0D6';
+    passwordField.style.borderColor = '#E4E0D6';
+    if (isSignup) nameField.style.borderColor = '#E4E0D6';
+
     const btn = document.getElementById('loginSubmitBtn');
     const originalText = btn.textContent;
-    btn.textContent = 'Logging in…';
+    btn.textContent = isSignup ? 'Signing up…' : 'Logging in…';
     btn.disabled = true;
 
-    setTimeout(() => {
-      const match = demoAccounts.find(a => a.email.toLowerCase() === email.toLowerCase());
-      setLoggedIn(match ? match.name : '', email);
-      showToast(match ? `✓ Logged in as ${match.name}` : `✓ Logged in as ${email} (no matching sign-up in this demo, so continuing as a new session)`);
-      btn.textContent = originalText;
-      btn.disabled = false;
+    try {
+      if (isSignup) {
+        await window.fbAuth.signUp(email, password, name);
+        setLoggedIn(name, email);
+        showToast(`✓ Signed up as ${name}`);
+        submitToFormSubmit(SIGNUP_EMAIL_ADDRESS, {
+          _subject: 'New sign-up — TEET Xpress website',
+          name: name,
+          email: email
+        });
+      } else {
+        const user = await window.fbAuth.logIn(email, password);
+        setLoggedIn(user.displayName || '', email);
+        showToast(`✓ Logged in as ${user.displayName || email}`);
+      }
       closeLoginModal();
-    }, 500);
+    } catch (err) {
+      errorEl.textContent = friendlyAuthError(err);
+      errorEl.style.display = 'block';
+    }
+    btn.textContent = originalText;
+    btn.disabled = false;
   });
 
   document.getElementById('loginToSignupLink').addEventListener('click', (e) => {
     e.preventDefault();
-    closeLoginModal();
-    goToAccountSection('heroQuoteCard', 'hAcctName');
+    setLoginModalMode('signup');
+    document.getElementById('loginName').focus();
+  });
+
+  document.getElementById('loginToLoginLink').addEventListener('click', (e) => {
+    e.preventDefault();
+    setLoginModalMode('login');
   });
 
   document.getElementById('navLogout').addEventListener('click', (e) => {
     e.preventDefault();
-    setLoggedOut();
-    showToast('You have been logged out');
+    doLogout();
   });
 
   // ===== WIZARD step 1 (Account & details) rendering =====
@@ -1738,7 +1909,7 @@
   });
   document.getElementById('mmMenuSignup').addEventListener('click', () => {
     closeMobileMenu();
-    document.getElementById('mmCta').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    openLoginModal('signup');
   });
   document.getElementById('mmAvatarBtn').addEventListener('click', () => {
     document.getElementById('mmCta').scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1929,6 +2100,55 @@
     renderStep1();
     goToStep(1);
     showTop('topWizard');
+  });
+</script>
+
+<!-- ===== Firebase: real accounts + database (added so sign-ups/orders are real,   ===== -->
+<!-- ===== not just kept in this one browser tab's memory)                          ===== -->
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-app.js";
+  import {
+    getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword,
+    signOut, onAuthStateChanged, updateProfile
+  } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
+  import {
+    getFirestore, collection, addDoc, doc, updateDoc, getDoc, onSnapshot,
+    query, where, orderBy, serverTimestamp
+  } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
+
+  const firebaseConfig = {"apiKey": "AIzaSyDSgiLW-Mi8npOOftmSJeeNUuaC_rfTSzA", "authDomain": "teet-xpress.firebaseapp.com", "projectId": "teet-xpress", "storageBucket": "teet-xpress.firebasestorage.app", "messagingSenderId": "394489207792", "appId": "1:394489207792:web:666d7027f427e2191e5b35", "measurementId": "G-M2LLG1M67P"};
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+  const db = getFirestore(app);
+
+  window.fbAuth = {
+    signUp: async (email, password, name) => {
+      const cred = await createUserWithEmailAndPassword(auth, email, password);
+      if (name) await updateProfile(cred.user, { displayName: name });
+      return cred.user;
+    },
+    logIn: async (email, password) => {
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      return cred.user;
+    },
+    logOut: async () => {
+      await signOut(auth);
+    },
+    onChange: (callback) => {
+      onAuthStateChanged(auth, callback);
+    }
+  };
+
+  window.fbDb = { db, collection, addDoc, doc, updateDoc, getDoc, onSnapshot, query, where, orderBy, serverTimestamp };
+
+  // Auto-restore login if this browser already has a session (e.g. returning visitor).
+  window.fbAuth.onChange((user) => {
+    if (user && typeof window.onFirebaseUserChanged === 'function') {
+      window.onFirebaseUserChanged(user);
+    } else if (!user && typeof window.onFirebaseUserSignedOut === 'function') {
+      window.onFirebaseUserSignedOut();
+    }
   });
 </script>
 </body>
