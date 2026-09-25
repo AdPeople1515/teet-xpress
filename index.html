@@ -817,7 +817,7 @@
           <div style="display: flex; justify-content: space-between;"><span style="color: #5B5F66;">Schedule</span><span id="summarySchedule" style="font-weight: 600;">Today · ASAP</span></div>
         </div>
 
-        <div style="border: 1.5px dashed #FF8A3D; border-radius: 16px; padding: 22px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; background: #FFF8F1;">
+        <div id="adminStaffBox" style="border: 1.5px dashed #FF8A3D; border-radius: 16px; padding: 22px; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; background: #FFF8F1;">
           <div style="display: flex; align-items: center; gap: 8px;">
             <span style="padding: 3px 9px; border-radius: 999px; background: #FF8A3D; color: #0B4A48; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;">Staff only</span>
             <span style="font-size: 13px; color: #5B5F66;">Not visible to the customer</span>
@@ -997,7 +997,7 @@
     </div>
 
     <div style="display: flex; justify-content: center; padding: 0 64px 8px;">
-      <div style="width: 100%; max-width: 700px; border: 1.5px dashed #FF8A3D; border-radius: 16px; padding: 18px 22px; box-sizing: border-box; background: #FFF8F1; display: flex; flex-direction: column; gap: 12px;">
+      <div id="driverStaffBox" style="width: 100%; max-width: 700px; border: 1.5px dashed #FF8A3D; border-radius: 16px; padding: 18px 22px; box-sizing: border-box; background: #FFF8F1; display: flex; flex-direction: column; gap: 12px;">
         <div style="display: flex; align-items: center; gap: 8px;">
           <span style="padding: 3px 9px; border-radius: 999px; background: #FF8A3D; color: #0B4A48; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;">Staff only</span>
           <span style="font-size: 13px; color: #5B5F66;">Not visible to the customer</span>
@@ -1111,6 +1111,17 @@
 
   // ===== Staff-only access gate (client-side only — a real staff login/backend =====
   // ===== should replace this before this site is used with real customers) =====
+  // Customers never see these boxes at all — they only render for anyone who opens
+  // the site with ?staff=1 in the link (e.g. https://.../?staff=1), and even then
+  // the passcode below is still required to actually view/edit anything inside.
+  const isStaffView = new URLSearchParams(window.location.search).has('staff');
+  const adminStaffBoxEl = document.getElementById('adminStaffBox');
+  const driverStaffBoxEl = document.getElementById('driverStaffBox');
+  if (!isStaffView) {
+    if (adminStaffBoxEl) adminStaffBoxEl.style.display = 'none';
+    if (driverStaffBoxEl) driverStaffBoxEl.style.display = 'none';
+  }
+
   const STAFF_PASSCODE = 'teet2026'; // change this to whatever passcode you want staff to use
   let staffUnlocked = false;
 
