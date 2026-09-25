@@ -583,6 +583,48 @@
 </div>
 
 <!-- =========================================================== -->
+<!-- TOP VIEW: STAFF DASHBOARD (real, database-backed order list -- only reachable -->
+<!-- via ?staff=1 in the link, gated by staff login + passcode)                    -->
+<!-- =========================================================== -->
+<div class="topview" id="topStaffDashboard">
+<div class="page">
+
+  <div style="display: flex; align-items: center; justify-content: space-between; padding: 22px 64px; background: #FFFFFF; border-bottom: 1px solid #E4E0D6; flex-wrap: wrap; gap: 12px;">
+    <div style="font-family: 'Space Grotesk', sans-serif; font-weight: 700; font-size: 20px; color: #0B4A48;">TEET Xpress — Staff dashboard</div>
+    <button type="button" id="staffBackHome" style="padding: 9px 16px; border-radius: 8px; border: 1px solid #E4E0D6; background: #FFFFFF; font-size: 13px; font-weight: 600; cursor: pointer;">Back to site</button>
+  </div>
+
+  <div style="max-width: 900px; margin: 0 auto; width: 100%; padding: 32px 24px 64px; box-sizing: border-box; display: flex; flex-direction: column; gap: 20px;">
+
+    <div id="staffNeedsLogin" style="border: 1.5px dashed #FF8A3D; border-radius: 16px; padding: 28px; background: #FFF8F1; display: flex; flex-direction: column; gap: 14px; align-items: flex-start;">
+      <div style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 16px;">Staff log in required</div>
+      <div style="font-size: 14px; color: #5B5F66; line-height: 1.5;">Log in with your staff account to view and manage pending orders.</div>
+      <button type="button" id="staffLoginBtn" style="padding: 11px 20px; border-radius: 9px; background: #0B4A48; color: #FFFFFF; border: none; font-weight: 600; font-size: 14px; cursor: pointer;">Log in</button>
+    </div>
+
+    <div id="staffNeedsPasscode" style="display: none; border: 1.5px dashed #FF8A3D; border-radius: 16px; padding: 28px; background: #FFF8F1; flex-direction: column; gap: 12px; align-items: flex-start;">
+      <div style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 16px;">Enter staff passcode</div>
+      <div style="display: flex; gap: 8px; flex-wrap: wrap; width: 100%;">
+        <input id="dashStaffPasscode" type="password" placeholder="Staff passcode" style="flex-grow: 1; min-width: 140px; padding: 10px 12px; border-radius: 9px; border: 1px solid #E4E0D6; font-size: 14px; box-sizing: border-box;">
+        <button type="button" id="dashStaffUnlockBtn" style="padding: 10px 18px; border-radius: 9px; background: #0B4A48; color: #FFFFFF; border: none; font-weight: 600; font-size: 13px; cursor: pointer;">Unlock</button>
+      </div>
+      <div id="dashStaffError" style="display: none; font-size: 12px; color: #E0533D;">Incorrect passcode.</div>
+    </div>
+
+    <div id="staffDashboardContent" style="display: none; flex-direction: column; gap: 16px;">
+      <div style="font-family: 'Space Grotesk', sans-serif; font-weight: 600; font-size: 18px;">Pending quote requests</div>
+      <div id="staffOrdersEmpty" style="font-size: 14px; color: #5B5F66;">No pending orders yet.</div>
+      <div id="staffOrderList" style="display: flex; flex-direction: column; gap: 16px;"></div>
+    </div>
+
+    <div style="font-size: 12px; color: #A6A9AE; line-height: 1.6;">Only orders from customers who were logged in when they submitted a booking request appear here. Access to this page and to the order data is restricted to staff accounts on the allow-list set up in Firestore.</div>
+
+  </div>
+
+</div>
+</div>
+
+<!-- =========================================================== -->
 <!-- TOP VIEW 1: BOOKING WIZARD (account details -> quote -> payment -> confirm) -->
 <!-- =========================================================== -->
 <div class="topview" id="topWizard">
@@ -1106,7 +1148,8 @@
     courierCharge: null,
     permitGst: null,
     deliveryStage: 2, // 2 = Picked up, 3 = On the way, 4 = Delivered
-    hasActiveOrder: false
+    hasActiveOrder: false,
+    currentOrderId: null // Firestore doc id for this order, once it's been synced (logged-in customers only)
   };
 
   // ===== Staff-only access gate (client-side only — a real staff login/backend =====
@@ -1131,6 +1174,7 @@
     document.getElementById('adminStaffContent').style.display = 'flex';
     document.getElementById('driverStaffGate').style.display = 'none';
     document.getElementById('driverStaffContent').style.display = 'flex';
+    updateStaffDashboardGateUI();
   }
 
   function tryUnlockStaff(inputId, errorId) {
@@ -1155,6 +1199,233 @@
   document.getElementById('driverStaffPasscode').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') tryUnlockStaff('driverStaffPasscode', 'driverStaffError');
   });
+
+  // ===== Real order storage (Firestore) — logged-in customers only =====
+  // A guest (not logged in) can still get a local-only quote exactly as before;
+  // once someone is logged in, their booking request is also saved as a real
+  // order document, which is what lets: (a) the customer see their quote update
+  // live in their own account even on a different device, and (b) staff see and
+  // price every pending order from the dashboard below, not just the one order
+  // that happens to be open in the same browser tab.
+  let customerOrderUnsub = null;
+  let staffOrdersUnsub = null;
+
+  function escapeHtml(str) {
+    return String(str == null ? '' : str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function applyQuoteLocally(courier, permit) {
+    state.courierCharge = courier;
+    state.permitGst = permit;
+    updatePriceDisplay();
+    document.getElementById('adminCourier').value = courier;
+    document.getElementById('adminPermit').value = permit;
+    document.getElementById('adminCourier').disabled = true;
+    document.getElementById('adminPermit').disabled = true;
+    document.getElementById('adminSetPriceBtn').textContent = '✓ Quote sent';
+    document.getElementById('adminSetPriceBtn').style.background = '#5B5F66';
+    document.getElementById('adminSetPriceBtn').disabled = true;
+    document.getElementById('adminPriceStatus').style.display = 'block';
+  }
+
+  // Called on the customer's own device once they're logged in and submit step 1.
+  function createFirestoreOrder(reqNo) {
+    if (!currentUser || !currentUser.uid || !window.fbDb) return;
+    const custName = (document.getElementById('acctname').value || '').trim() || currentUser.name;
+    const custEmail = (document.getElementById('acctemail').value || '').trim() || currentUser.email;
+    const pName = (document.getElementById('pname').value || '').trim();
+    const pAddr = (document.getElementById('paddr').value || '').trim();
+    const pPhone = (document.getElementById('pphone').value || '').trim();
+    const dName = (document.getElementById('dname').value || '').trim();
+    const dAddr = (document.getElementById('daddr').value || '').trim();
+    const dPhone = (document.getElementById('dphone').value || '').trim();
+    const cartons = (document.getElementById('cartons').value || '').trim() || '1';
+    const fragile = document.getElementById('fragile').checked;
+    const bDate = (document.getElementById('bdate').value || '').trim();
+    const bTime = (document.getElementById('btime').value || '').trim();
+    const routeLabel = state.route === 'my-sg' ? 'Malaysia → Singapore' : 'Singapore → Malaysia';
+
+    const { db, collection, addDoc, serverTimestamp } = window.fbDb;
+    addDoc(collection(db, 'orders'), {
+      requestNumber: reqNo,
+      customerUid: currentUser.uid,
+      customerName: custName,
+      customerEmail: custEmail,
+      route: routeLabel,
+      packageSize: sizeLabels[state.size],
+      cartons: cartons,
+      fragile: fragile,
+      pickupContact: pName,
+      pickupAddress: pAddr,
+      pickupPhone: pPhone,
+      dropoffContact: dName,
+      dropoffAddress: dAddr,
+      dropoffPhone: dPhone,
+      scheduleDate: bDate,
+      scheduleTime: bTime,
+      status: 'pending_quote',
+      courierCharge: null,
+      permitGst: null,
+      createdAt: serverTimestamp()
+    }).then((docRef) => {
+      state.currentOrderId = docRef.id;
+      listenToOrder(docRef.id);
+    }).catch((err) => {
+      console.error('Firestore order create failed', err);
+    });
+  }
+
+  // Live-updates the customer's own page the moment staff saves a price for this
+  // order, even if staff did it from a completely different device.
+  function listenToOrder(orderId) {
+    if (!window.fbDb) return;
+    const { db, doc, onSnapshot } = window.fbDb;
+    if (customerOrderUnsub) { customerOrderUnsub(); customerOrderUnsub = null; }
+    customerOrderUnsub = onSnapshot(doc(db, 'orders', orderId), (snap) => {
+      if (!snap.exists()) return;
+      const data = snap.data();
+      if (data.status === 'quoted' && data.courierCharge != null &&
+          (state.courierCharge !== data.courierCharge || state.permitGst !== data.permitGst)) {
+        applyQuoteLocally(data.courierCharge, data.permitGst);
+        showToast('✓ Your quote is ready — RM ' + (data.courierCharge + data.permitGst).toFixed(2));
+      }
+    });
+  }
+
+  // ===== Staff dashboard: list every pending order and let staff price + WhatsApp it =====
+  function renderOrderCard(id, o) {
+    const quoted = o.status === 'quoted' || o.status === 'paid';
+    const disabledAttr = quoted ? 'disabled' : '';
+    const courierVal = o.courierCharge != null ? o.courierCharge : '';
+    const permitVal = o.permitGst != null ? o.permitGst : '';
+    return (
+      '<div class="staffOrderCard" data-order-id="' + escapeHtml(id) + '" ' +
+      'data-customer-name="' + escapeHtml(o.customerName || 'there') + '" ' +
+      'data-request-number="' + escapeHtml(o.requestNumber || id.slice(0, 6)) + '" ' +
+      'data-route="' + escapeHtml(o.route || '') + '" ' +
+      'data-pickup-phone="' + escapeHtml(o.pickupPhone || '') + '" ' +
+      'style="border: 1px solid #E4E0D6; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 10px; background: #FFFFFF;">' +
+        '<div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;">' +
+          '<div style="font-weight: 700; font-family: \'Space Grotesk\', sans-serif;">' + escapeHtml(o.customerName || '') + ' — #' + escapeHtml(o.requestNumber || id.slice(0, 6)) + '</div>' +
+          '<div style="font-size: 12px; color: #5B5F66;">' + escapeHtml(o.customerEmail || '') + '</div>' +
+        '</div>' +
+        '<div style="font-size: 13px; color: #5B5F66;">' + escapeHtml(o.route || '') + ' · ' + escapeHtml(o.packageSize || '') + ' · ' + escapeHtml(o.cartons || '1') + ' carton(s)' + (o.fragile ? ' · Fragile' : '') + '</div>' +
+        '<div style="font-size: 13px;">Pickup: ' + escapeHtml(o.pickupContact || '—') + ', ' + escapeHtml(o.pickupAddress || '—') + ' (' + escapeHtml(o.pickupPhone || '—') + ')</div>' +
+        '<div style="font-size: 13px;">Drop-off: ' + escapeHtml(o.dropoffContact || '—') + ', ' + escapeHtml(o.dropoffAddress || '—') + ' (' + escapeHtml(o.dropoffPhone || '—') + ')</div>' +
+        '<div style="font-size: 13px; color: #5B5F66;">Preferred: ' + escapeHtml(o.scheduleDate || '—') + ' · ' + escapeHtml(o.scheduleTime || '—') + '</div>' +
+        '<div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px;">' +
+          '<div style="flex-grow: 1; min-width: 130px;">' +
+            '<label style="font-size: 11px; font-weight: 600; color: #5B5F66;">Courier charge (RM)</label>' +
+            '<input type="number" step="0.01" min="0" class="staffCourierInput" value="' + courierVal + '" ' + disabledAttr + ' style="width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid #E4E0D6; font-size: 13px; box-sizing: border-box;">' +
+          '</div>' +
+          '<div style="flex-grow: 1; min-width: 130px;">' +
+            '<label style="font-size: 11px; font-weight: 600; color: #5B5F66;">Permit &amp; GST (RM)</label>' +
+            '<input type="number" step="0.01" min="0" class="staffPermitInput" value="' + permitVal + '" ' + disabledAttr + ' style="width: 100%; padding: 9px 11px; border-radius: 8px; border: 1px solid #E4E0D6; font-size: 13px; box-sizing: border-box;">' +
+          '</div>' +
+        '</div>' +
+        '<div style="display: flex; gap: 10px; flex-wrap: wrap; margin-top: 4px;">' +
+          '<button type="button" class="staffSaveQuoteBtn" ' + disabledAttr + ' style="padding: 10px 16px; border-radius: 8px; background: #0B4A48; color: #FFFFFF; border: none; font-weight: 600; font-size: 13px; cursor: pointer;">' + (quoted ? '✓ Quote sent' : 'Save &amp; send quote') + '</button>' +
+          '<button type="button" class="staffWhatsAppBtn" style="padding: 10px 16px; border-radius: 8px; background: #25D366; color: #FFFFFF; border: none; font-weight: 600; font-size: 13px; cursor: pointer;">Send via WhatsApp</button>' +
+        '</div>' +
+      '</div>'
+    );
+  }
+
+  function startStaffOrdersListener() {
+    if (!window.fbDb || !currentUser) return;
+    const { db, collection, query, where, orderBy, onSnapshot } = window.fbDb;
+    if (staffOrdersUnsub) { staffOrdersUnsub(); staffOrdersUnsub = null; }
+    const listEl = document.getElementById('staffOrderList');
+    const emptyEl = document.getElementById('staffOrdersEmpty');
+    try {
+      const q = query(collection(db, 'orders'), where('status', '==', 'pending_quote'), orderBy('createdAt', 'desc'));
+      staffOrdersUnsub = onSnapshot(q, (snap) => {
+        if (snap.empty) {
+          listEl.innerHTML = '';
+          emptyEl.style.display = 'block';
+          emptyEl.textContent = 'No pending orders yet.';
+          return;
+        }
+        emptyEl.style.display = 'none';
+        listEl.innerHTML = snap.docs.map((d) => renderOrderCard(d.id, d.data())).join('');
+      }, (err) => {
+        emptyEl.style.display = 'block';
+        emptyEl.textContent = 'Could not load orders — make sure this account is on the staff allow-list (' + (err && err.message ? err.message : 'permission error') + ').';
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  }
+
+  document.getElementById('staffOrderList').addEventListener('click', async (e) => {
+    const card = e.target.closest('.staffOrderCard');
+    if (!card) return;
+    const orderId = card.getAttribute('data-order-id');
+
+    if (e.target.classList.contains('staffSaveQuoteBtn')) {
+      const courierVal = parseFloat(card.querySelector('.staffCourierInput').value);
+      const permitVal = parseFloat(card.querySelector('.staffPermitInput').value);
+      const courier = isNaN(courierVal) ? 0 : courierVal;
+      const permit = isNaN(permitVal) ? 0 : permitVal;
+      const originalText = e.target.textContent;
+      e.target.disabled = true;
+      e.target.textContent = 'Saving…';
+      try {
+        const { db, doc, updateDoc, serverTimestamp } = window.fbDb;
+        await updateDoc(doc(db, 'orders', orderId), {
+          courierCharge: courier, permitGst: permit, status: 'quoted', quotedAt: serverTimestamp()
+        });
+        showToast('✓ Quote saved — the customer will see it in their account.');
+      } catch (err) {
+        e.target.disabled = false;
+        e.target.textContent = originalText;
+        showToast('Could not save the quote: ' + (err && err.message ? err.message : 'unknown error'));
+      }
+    } else if (e.target.classList.contains('staffWhatsAppBtn')) {
+      const courierVal = parseFloat(card.querySelector('.staffCourierInput').value) || 0;
+      const permitVal = parseFloat(card.querySelector('.staffPermitInput').value) || 0;
+      const total = (courierVal + permitVal).toFixed(2);
+      const name = card.getAttribute('data-customer-name') || 'there';
+      const reqNo = card.getAttribute('data-request-number') || '';
+      const route = card.getAttribute('data-route') || '';
+      const phone = card.getAttribute('data-pickup-phone') || '';
+      const msg = 'Hi ' + name + ', this is TEET Xpress. Your quote for request ' + reqNo + ' (' + route + ') is ready:\n' +
+        'Courier charge: RM ' + courierVal.toFixed(2) + '\n' +
+        'Permit & GST: RM ' + permitVal.toFixed(2) + '\n' +
+        'Total: RM ' + total + '\n' +
+        'Please log in to your account on our website to confirm and pay. Thank you!';
+      const digits = phone.replace(/[^\d+]/g, '').replace(/^\+/, '');
+      const waUrl = 'https://wa.me/' + digits + '?text=' + encodeURIComponent(msg);
+      window.open(waUrl, '_blank');
+    }
+  });
+
+  function updateStaffDashboardGateUI() {
+    if (!isStaffView) return;
+    const needsLogin = document.getElementById('staffNeedsLogin');
+    const needsPasscode = document.getElementById('staffNeedsPasscode');
+    const content = document.getElementById('staffDashboardContent');
+    if (!needsLogin) return;
+    if (!currentUser) {
+      needsLogin.style.display = 'flex';
+      needsPasscode.style.display = 'none';
+      content.style.display = 'none';
+    } else if (!staffUnlocked) {
+      needsLogin.style.display = 'none';
+      needsPasscode.style.display = 'flex';
+      content.style.display = 'none';
+    } else {
+      needsLogin.style.display = 'none';
+      needsPasscode.style.display = 'none';
+      content.style.display = 'flex';
+      startStaffOrdersListener();
+    }
+  }
 
   function updateTrackNavAccess() {
     const navLink = document.getElementById('navTrackOrder');
@@ -1352,11 +1623,11 @@
     btn.disabled = true;
 
     try {
-      await window.fbAuth.signUp(emailField.value.trim(), passwordField.value, nameField.value.trim());
+      const heroUser = await window.fbAuth.signUp(emailField.value.trim(), passwordField.value, nameField.value.trim());
       btn.textContent = '✓ Signed up';
       btn.style.background = '#5B5F66';
       document.getElementById('hAcctSignupMsg').style.display = 'block';
-      setLoggedIn(nameField.value.trim(), emailField.value.trim());
+      setLoggedIn(nameField.value.trim(), emailField.value.trim(), heroUser.uid);
 
       const result = await submitToFormSubmit(SIGNUP_EMAIL_ADDRESS, {
         _subject: 'New sign-up — TEET Xpress website',
@@ -1379,8 +1650,8 @@
   // ===== Real accounts via Firebase Authentication =====
   let currentUser = null;
 
-  function setLoggedIn(name, email) {
-    currentUser = { name: name || email.split('@')[0], email };
+  function setLoggedIn(name, email, uid) {
+    currentUser = { name: name || email.split('@')[0], email, uid: uid || null };
     document.getElementById('navAccountName').textContent = currentUser.name;
     document.getElementById('navLoggedOut').style.display = 'none';
     document.getElementById('navLoggedIn').style.display = 'flex';
@@ -1396,10 +1667,12 @@
     document.getElementById('wizardLoggedInBadge').style.display = 'flex';
     document.getElementById('mmMenuLoginPrompt').style.display = 'none';
     document.getElementById('mmMenuLoggedInBadge').style.display = 'flex';
+    updateStaffDashboardGateUI();
   }
 
   function setLoggedOut() {
     currentUser = null;
+    if (customerOrderUnsub) { customerOrderUnsub(); customerOrderUnsub = null; }
     document.getElementById('navLoggedOut').style.display = 'flex';
     document.getElementById('navLoggedIn').style.display = 'none';
     document.getElementById('heroLoginPrompt').style.display = 'block';
@@ -1408,13 +1681,14 @@
     document.getElementById('wizardLoggedInBadge').style.display = 'none';
     document.getElementById('mmMenuLoginPrompt').style.display = 'flex';
     document.getElementById('mmMenuLoggedInBadge').style.display = 'none';
+    updateStaffDashboardGateUI();
   }
 
   // Called by the Firebase bridge script whenever the signed-in user changes --
   // this is what keeps a returning visitor logged in across page reloads.
   window.onFirebaseUserChanged = function (user) {
     if (!currentUser || currentUser.email !== user.email) {
-      setLoggedIn(user.displayName || '', user.email);
+      setLoggedIn(user.displayName || '', user.email, user.uid);
     }
   };
   window.onFirebaseUserSignedOut = function () {
@@ -1506,8 +1780,8 @@
 
     try {
       if (isSignup) {
-        await window.fbAuth.signUp(email, password, name);
-        setLoggedIn(name, email);
+        const signupUser = await window.fbAuth.signUp(email, password, name);
+        setLoggedIn(name, email, signupUser.uid);
         showToast(`✓ Signed up as ${name}`);
         submitToFormSubmit(SIGNUP_EMAIL_ADDRESS, {
           _subject: 'New sign-up — TEET Xpress website',
@@ -1516,7 +1790,7 @@
         });
       } else {
         const user = await window.fbAuth.logIn(email, password);
-        setLoggedIn(user.displayName || '', email);
+        setLoggedIn(user.displayName || '', email, user.uid);
         showToast(`✓ Logged in as ${user.displayName || email}`);
       }
       closeLoginModal();
@@ -1711,6 +1985,8 @@
     document.getElementById('staffDriverName').value = '';
     state.deliveryStage = 2;
     state.hasActiveOrder = false;
+    state.currentOrderId = null;
+    if (customerOrderUnsub) { customerOrderUnsub(); customerOrderUnsub = null; }
     updateTrackNavAccess();
     renderDeliveryStage();
     renderHome();
@@ -1725,6 +2001,7 @@
     const reqNo = generateRequestNumber();
     document.getElementById('reqNumber').textContent = reqNo;
     sendQuoteRequestNotification(reqNo);
+    createFirestoreOrder(reqNo);
     goToStep(2);
   });
   document.getElementById('btnToPayment').addEventListener('click', () => { updatePriceDisplay(); goToStep(3); });
@@ -1733,15 +2010,18 @@
   document.getElementById('adminSetPriceBtn').addEventListener('click', () => {
     const courierVal = parseFloat(document.getElementById('adminCourier').value);
     const permitVal = parseFloat(document.getElementById('adminPermit').value);
-    state.courierCharge = isNaN(courierVal) ? 0 : courierVal;
-    state.permitGst = isNaN(permitVal) ? 0 : permitVal;
-    updatePriceDisplay();
-    document.getElementById('adminCourier').disabled = true;
-    document.getElementById('adminPermit').disabled = true;
-    document.getElementById('adminSetPriceBtn').textContent = '✓ Quote sent';
-    document.getElementById('adminSetPriceBtn').style.background = '#5B5F66';
-    document.getElementById('adminSetPriceBtn').disabled = true;
-    document.getElementById('adminPriceStatus').style.display = 'block';
+    const courier = isNaN(courierVal) ? 0 : courierVal;
+    const permit = isNaN(permitVal) ? 0 : permitVal;
+    applyQuoteLocally(courier, permit);
+    // If this particular order was synced to Firestore (the customer was logged in
+    // when they submitted it), also save the price there so it shows up in their
+    // account and in the staff dashboard — not just in this one browser tab.
+    if (state.currentOrderId && window.fbDb) {
+      const { db, doc, updateDoc, serverTimestamp } = window.fbDb;
+      updateDoc(doc(db, 'orders', state.currentOrderId), {
+        courierCharge: courier, permitGst: permit, status: 'quoted', quotedAt: serverTimestamp()
+      }).catch((err) => console.error('Firestore quote sync failed', err));
+    }
   });
   document.getElementById('btnEditFromPayment').addEventListener('click', () => { goToStep(1); });
   document.getElementById('btnPayConfirm').addEventListener('click', () => {
@@ -2112,6 +2392,20 @@
     goToStep(1);
     showTop('topWizard');
   });
+
+  // ===== Staff dashboard: page-level wiring =====
+  document.getElementById('staffBackHome').addEventListener('click', () => showTop('topHome'));
+  document.getElementById('staffLoginBtn').addEventListener('click', () => openLoginModal('login'));
+  document.getElementById('dashStaffUnlockBtn').addEventListener('click', () => {
+    tryUnlockStaff('dashStaffPasscode', 'dashStaffError');
+  });
+  document.getElementById('dashStaffPasscode').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') tryUnlockStaff('dashStaffPasscode', 'dashStaffError');
+  });
+  if (isStaffView) {
+    showTop('topStaffDashboard');
+    updateStaffDashboardGateUI();
+  }
 </script>
 
 <!-- ===== Firebase: real accounts + database (added so sign-ups/orders are real,   ===== -->
