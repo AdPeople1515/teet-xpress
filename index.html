@@ -1315,13 +1315,22 @@
   function showResumeOrderBanner(orderId, data) {
     const el = document.getElementById('resumeOrderBanner');
     const textEl = document.getElementById('resumeOrderText');
+    const btnEl = document.getElementById('resumeOrderBtn');
     if (!el || !textEl) return;
     const reqNo = data.requestNumber || orderId.slice(0, 6);
     if (data.status === 'quoted' && data.courierCharge != null) {
       const total = (data.courierCharge + (data.permitGst || 0)).toFixed(2);
       textEl.textContent = 'Your quote for order #' + reqNo + ' is ready — RM ' + total + '. Tap to review and pay.';
+      if (btnEl) btnEl.textContent = 'View & pay';
+    } else if (data.status === 'on_the_way') {
+      textEl.textContent = 'Your order #' + reqNo + ' is on the way!';
+      if (btnEl) btnEl.textContent = 'Track order';
+    } else if (data.status === 'paid') {
+      textEl.textContent = 'Your order #' + reqNo + ' is confirmed and paid — a driver will be assigned shortly.';
+      if (btnEl) btnEl.textContent = 'Track order';
     } else {
       textEl.textContent = "Your quote request #" + reqNo + " is being prepared — we'll let you know once it's priced.";
+      if (btnEl) btnEl.textContent = 'View order';
     }
     el.style.display = 'flex';
     pendingResumeOrder = { id: orderId, data: data };
@@ -1343,13 +1352,25 @@
     document.getElementById('bdate').value = data.scheduleDate || '';
     document.getElementById('btime').value = data.scheduleTime || '';
     document.getElementById('reqNumber').textContent = data.requestNumber || '';
+    document.getElementById('orderNumber').textContent = data.requestNumber || '';
     renderHome();
     renderStep1();
     fillQuoteSummary();
     listenToOrder(orderId);
-    if (data.status === 'quoted' && data.courierCharge != null) {
+    if (data.courierCharge != null) {
       applyQuoteLocally(data.courierCharge, data.permitGst || 0);
+    }
+    if (data.status === 'quoted') {
       goToStep(3);
+    } else if (data.status === 'paid' || data.status === 'on_the_way') {
+      // Restore delivery tracking state so step 4 shows the right stage of progress,
+      // the same as it would if this were still the original browser tab.
+      state.deliveryStage = data.status === 'on_the_way' ? 3 : 2;
+      state.hasActiveOrder = true;
+      if (data.driverName) document.getElementById('staffDriverName').value = data.driverName;
+      updateTrackNavAccess();
+      renderDeliveryStage();
+      goToStep(4);
     } else {
       goToStep(2);
     }
@@ -1366,15 +1387,29 @@
       const q = query(collection(db, 'orders'), where('customerUid', '==', currentUser.uid));
       const snap = await getDocs(q);
       if (snap.empty) { hideResumeOrderBanner(); return; }
-      let latest = null;
+      // If this customer has more than one order on file (e.g. from earlier testing),
+      // always prefer showing the most recent order that's actually READY TO PAY
+      // (status 'quoted' with a real price attached) over an older one that's still
+      // waiting on a price — that's the one they can act on right now.
+      // Priority: an unpaid quote (needs action now) beats an order already in
+      // delivery (worth tracking) beats one still waiting on a price.
+      let bestQuoted = null;
+      let bestActive = null;
+      let bestPending = null;
       snap.forEach((docSnap) => {
         const data = docSnap.data();
-        if (data.status !== 'pending_quote' && data.status !== 'quoted') return;
         const t = (data.createdAt && data.createdAt.toMillis) ? data.createdAt.toMillis() : 0;
-        if (!latest || t >= latest.t) latest = { id: docSnap.id, data: data, t: t };
+        if (data.status === 'quoted' && data.courierCharge != null) {
+          if (!bestQuoted || t >= bestQuoted.t) bestQuoted = { id: docSnap.id, data: data, t: t };
+        } else if (data.status === 'paid' || data.status === 'on_the_way') {
+          if (!bestActive || t >= bestActive.t) bestActive = { id: docSnap.id, data: data, t: t };
+        } else if (data.status === 'pending_quote') {
+          if (!bestPending || t >= bestPending.t) bestPending = { id: docSnap.id, data: data, t: t };
+        }
       });
-      if (!latest) { hideResumeOrderBanner(); return; }
-      showResumeOrderBanner(latest.id, latest.data);
+      const chosen = bestQuoted || bestActive || bestPending;
+      if (!chosen) { hideResumeOrderBanner(); return; }
+      showResumeOrderBanner(chosen.id, chosen.data);
     } catch (err) {
       console.error('checkForCustomerOrder failed', err);
     }
@@ -2117,6 +2152,14 @@
     renderDeliveryStage();
     sendCustomerNotification(2);
     goToStep(4);
+    // Keep the real order record in sync so the customer's account (and this order's
+    // entry in the database) correctly shows "paid" from here on, not "quoted" forever.
+    if (state.currentOrderId && window.fbDb) {
+      const { db, doc, updateDoc, serverTimestamp } = window.fbDb;
+      updateDoc(doc(db, 'orders', state.currentOrderId), {
+        status: 'paid', paymentMethod: methodLabels[state.method], paidAt: serverTimestamp()
+      }).catch((err) => console.error('Firestore paid-status sync failed', err));
+    }
   });
   document.getElementById('btnRestart2').addEventListener('click', resetAll);
   document.getElementById('btnRestart4').addEventListener('click', resetAll);
@@ -2394,7 +2437,7 @@
   // WhatsApp/email and send it to the real customer.
   function buildCustomerMessage(stage, name, orderNo) {
     const messages = {
-      2: `Hi ${name}, good news — your TEET Xpress order #${orderNo} has been picked up and a driver has been assigned. Estimated arrival ~45 min. We'll message you again once it's delivered. — TEET Xpress`,
+      2: `Hi ${name}, good news — your TEET Xpress order #${orderNo} has been picked up and a driver has been assigned. Your order has been confirmed — we will proceed with the next step of pickup and delivery. We'll update you again. — TEET Xpress`,
       3: `Hi ${name}, your TEET Xpress order #${orderNo} is on the way — estimated arrival ~15 min. — TEET Xpress`,
       4: `Hi ${name}, your TEET Xpress order #${orderNo} has been delivered. Thank you for choosing us for your delivery! — TEET Xpress`
     };
@@ -2459,6 +2502,20 @@
       state.deliveryStage += 1;
       renderDeliveryStage();
       if (state.deliveryStage === 4) sendCustomerNotification(4);
+      // Same idea as payment above -- keep the order's real status current so the
+      // customer's account reflects "on the way" / "delivered", not a stale "paid".
+      if (state.currentOrderId && window.fbDb) {
+        const { db, doc, updateDoc, serverTimestamp } = window.fbDb;
+        const newStatus = state.deliveryStage === 3 ? 'on_the_way' : state.deliveryStage === 4 ? 'delivered' : null;
+        if (newStatus) {
+          const driverNameVal = (document.getElementById('staffDriverName').value || '').trim();
+          const updatePayload = { status: newStatus, statusUpdatedAt: serverTimestamp() };
+          if (driverNameVal) updatePayload.driverName = driverNameVal;
+          if (newStatus === 'delivered') updatePayload.deliveredAt = serverTimestamp();
+          updateDoc(doc(db, 'orders', state.currentOrderId), updatePayload)
+            .catch((err) => console.error('Firestore delivery-status sync failed', err));
+        }
+      }
     }
   });
   renderDeliveryStage();
