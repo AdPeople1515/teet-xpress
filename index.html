@@ -92,6 +92,10 @@
       <label for="loginEmail" style="font-size: 12px; font-weight: 600; color: #5B5F66;">Email</label>
       <input id="loginEmail" type="text" placeholder="you@email.com" style="padding: 12px 14px; border-radius: 10px; border: 1px solid #E4E0D6; font-size: 14px; box-sizing: border-box; width: 100%;">
     </div>
+    <div id="loginModalPhoneRow" style="display: none; flex-direction: column; gap: 6px;">
+      <label for="loginPhone" style="font-size: 12px; font-weight: 600; color: #5B5F66;">WhatsApp number</label>
+      <input id="loginPhone" type="text" placeholder="+60 1X-XXX XXXX" style="padding: 12px 14px; border-radius: 10px; border: 1px solid #E4E0D6; font-size: 14px; box-sizing: border-box; width: 100%;">
+    </div>
     <div style="display: flex; flex-direction: column; gap: 6px;">
       <label for="loginPassword" style="font-size: 12px; font-weight: 600; color: #5B5F66;">Password</label>
       <input id="loginPassword" type="password" placeholder="At least 6 characters" style="padding: 12px 14px; border-radius: 10px; border: 1px solid #E4E0D6; font-size: 14px; box-sizing: border-box; width: 100%;">
@@ -188,6 +192,10 @@
             <label for="hAcctEmail" style="font-size: 12px; font-weight: 600; color: #5B5F66;">Email</label>
             <input id="hAcctEmail" type="text" placeholder="you@email.com" style="padding: 11px 13px; border-radius: 9px; border: 1px solid #E4E0D6; font-size: 13px; box-sizing: border-box; width: 100%;">
           </div>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label for="hAcctPhone" style="font-size: 12px; font-weight: 600; color: #5B5F66;">WhatsApp number</label>
+          <input id="hAcctPhone" type="text" placeholder="+60 1X-XXX XXXX" style="padding: 11px 13px; border-radius: 9px; border: 1px solid #E4E0D6; font-size: 13px; box-sizing: border-box; width: 100%;">
         </div>
         <div style="display: flex; flex-direction: column; gap: 6px;">
           <label for="hAcctPassword" style="font-size: 12px; font-weight: 600; color: #5B5F66;">Password</label>
@@ -1149,7 +1157,9 @@
     permitGst: null,
     deliveryStage: 2, // 2 = Picked up, 3 = On the way, 4 = Delivered
     hasActiveOrder: false,
-    currentOrderId: null // Firestore doc id for this order, once it's been synced (logged-in customers only)
+    currentOrderId: null, // Firestore doc id for this order, once it's been synced (logged-in customers only)
+    accountPhone: null, // WhatsApp number saved at sign-up, so staff can always reach this customer
+    orderCustomerPhone: null // same number, but read off the currently-loaded order (for staff view)
   };
 
   // ===== Staff-only access gate (client-side only — a real staff login/backend =====
@@ -1260,6 +1270,7 @@
       customerUid: currentUser.uid,
       customerName: custName,
       customerEmail: custEmail,
+      customerPhone: state.accountPhone || '',
       route: routeLabel,
       packageSize: sizeLabels[state.size],
       cartons: cartons,
@@ -1293,6 +1304,10 @@
     customerOrderUnsub = onSnapshot(doc(db, 'orders', orderId), (snap) => {
       if (!snap.exists()) return;
       const data = snap.data();
+      // Keep this order's own WhatsApp number (the account holder's, saved at sign-up)
+      // on hand for staff — this is what the "Send via WhatsApp" button in the tracking
+      // panel uses, since staff viewing this order don't have the customer's own login.
+      state.orderCustomerPhone = data.customerPhone || '';
       if (data.status === 'quoted' && data.courierCharge != null &&
           (state.courierCharge !== data.courierCharge || state.permitGst !== data.permitGst)) {
         applyQuoteLocally(data.courierCharge, data.permitGst);
@@ -1425,6 +1440,7 @@
       'data-request-number="' + escapeHtml(o.requestNumber || id.slice(0, 6)) + '" ' +
       'data-route="' + escapeHtml(o.route || '') + '" ' +
       'data-pickup-phone="' + escapeHtml(o.pickupPhone || '') + '" ' +
+      'data-customer-phone="' + escapeHtml(o.customerPhone || '') + '" ' +
       'style="border: 1px solid #E4E0D6; border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 10px; background: #FFFFFF;">' +
         '<div style="display: flex; justify-content: space-between; flex-wrap: wrap; gap: 8px;">' +
           '<div style="font-weight: 700; font-family: \'Space Grotesk\', sans-serif;">' + escapeHtml(o.customerName || '') + ' — #' + escapeHtml(o.requestNumber || id.slice(0, 6)) + '</div>' +
@@ -1509,7 +1525,7 @@
       const name = card.getAttribute('data-customer-name') || 'there';
       const reqNo = card.getAttribute('data-request-number') || '';
       const route = card.getAttribute('data-route') || '';
-      const phone = card.getAttribute('data-pickup-phone') || '';
+      const phone = card.getAttribute('data-customer-phone') || card.getAttribute('data-pickup-phone') || '';
       const msg = 'Hi ' + name + ', this is TEET Xpress. Your quote for request ' + reqNo + ' (' + route + ') is ready:\n' +
         'Courier charge: RM ' + courierVal.toFixed(2) + '\n' +
         'Permit & GST: RM ' + permitVal.toFixed(2) + '\n' +
@@ -1715,13 +1731,15 @@
   document.getElementById('hAcctSignupBtn').addEventListener('click', async () => {
     const nameField = document.getElementById('hAcctName');
     const emailField = document.getElementById('hAcctEmail');
+    const phoneField = document.getElementById('hAcctPhone');
     const passwordField = document.getElementById('hAcctPassword');
     const btn = document.getElementById('hAcctSignupBtn');
     const errorEl = document.getElementById('hAcctSignupError');
     errorEl.style.display = 'none';
-    if (!nameField.value.trim() || !emailField.value.trim() || !passwordField.value) {
+    if (!nameField.value.trim() || !emailField.value.trim() || !phoneField.value.trim() || !passwordField.value) {
       nameField.style.borderColor = nameField.value.trim() ? '#E4E0D6' : '#E0533D';
       emailField.style.borderColor = emailField.value.trim() ? '#E4E0D6' : '#E0533D';
+      phoneField.style.borderColor = phoneField.value.trim() ? '#E4E0D6' : '#E0533D';
       passwordField.style.borderColor = passwordField.value ? '#E4E0D6' : '#E0533D';
       return;
     }
@@ -1732,6 +1750,7 @@
     }
     nameField.style.borderColor = '#E4E0D6';
     emailField.style.borderColor = '#E4E0D6';
+    phoneField.style.borderColor = '#E4E0D6';
     passwordField.style.borderColor = '#E4E0D6';
 
     const originalText = btn.textContent;
@@ -1739,16 +1758,18 @@
     btn.disabled = true;
 
     try {
-      const heroUser = await window.fbAuth.signUp(emailField.value.trim(), passwordField.value, nameField.value.trim());
+      const heroUser = await window.fbAuth.signUp(emailField.value.trim(), passwordField.value, nameField.value.trim(), phoneField.value.trim());
       btn.textContent = '✓ Signed up';
       btn.style.background = '#5B5F66';
       document.getElementById('hAcctSignupMsg').style.display = 'block';
+      state.accountPhone = phoneField.value.trim();
       setLoggedIn(nameField.value.trim(), emailField.value.trim(), heroUser.uid);
 
       const result = await submitToFormSubmit(SIGNUP_EMAIL_ADDRESS, {
         _subject: 'New sign-up — TEET Xpress website',
         name: nameField.value.trim(),
-        email: emailField.value.trim()
+        email: emailField.value.trim(),
+        whatsapp: phoneField.value.trim()
       });
       if (result.ok) {
         showToast('✓ Sign-up notification sent to our team');
@@ -1789,6 +1810,7 @@
 
   function setLoggedOut() {
     currentUser = null;
+    state.accountPhone = null;
     if (customerOrderUnsub) { customerOrderUnsub(); customerOrderUnsub = null; }
     document.getElementById('navLoggedOut').style.display = 'flex';
     document.getElementById('navLoggedIn').style.display = 'none';
@@ -1807,6 +1829,14 @@
   window.onFirebaseUserChanged = function (user) {
     if (!currentUser || currentUser.email !== user.email) {
       setLoggedIn(user.displayName || '', user.email, user.uid);
+    }
+    // Load the WhatsApp number saved at sign-up (covers login + auto-restored sessions,
+    // not just the signup moment itself, so it's there on any device this customer uses).
+    if (window.fbDb) {
+      const { db, doc, getDoc } = window.fbDb;
+      getDoc(doc(db, 'users', user.uid)).then((snap) => {
+        state.accountPhone = (snap.exists() && snap.data().phone) || state.accountPhone || '';
+      }).catch((err) => console.error('Could not load account phone', err));
     }
   };
   window.onFirebaseUserSignedOut = function () {
@@ -1836,6 +1866,7 @@
     const isSignup = mode === 'signup';
     document.getElementById('loginModalTitle').textContent = isSignup ? 'Sign up' : 'Log in';
     document.getElementById('loginModalNameRow').style.display = isSignup ? 'flex' : 'none';
+    document.getElementById('loginModalPhoneRow').style.display = isSignup ? 'flex' : 'none';
     document.getElementById('loginSubmitBtn').textContent = isSignup ? 'Sign up' : 'Log in';
     document.getElementById('loginModalToSignup').style.display = isSignup ? 'none' : 'inline';
     document.getElementById('loginModalToLogin').style.display = isSignup ? 'inline' : 'none';
@@ -1867,6 +1898,7 @@
   document.getElementById('loginSubmitBtn').addEventListener('click', async () => {
     const nameField = document.getElementById('loginName');
     const emailField = document.getElementById('loginEmail');
+    const phoneField = document.getElementById('loginPhone');
     const passwordField = document.getElementById('loginPassword');
     const errorEl = document.getElementById('loginModalError');
     errorEl.style.display = 'none';
@@ -1875,11 +1907,15 @@
     const email = emailField.value.trim();
     const password = passwordField.value;
     const name = nameField.value.trim();
+    const phone = phoneField.value.trim();
 
-    if (!email || !password || (isSignup && !name)) {
+    if (!email || !password || (isSignup && (!name || !phone))) {
       emailField.style.borderColor = email ? '#E4E0D6' : '#E0533D';
       passwordField.style.borderColor = password ? '#E4E0D6' : '#E0533D';
-      if (isSignup) nameField.style.borderColor = name ? '#E4E0D6' : '#E0533D';
+      if (isSignup) {
+        nameField.style.borderColor = name ? '#E4E0D6' : '#E0533D';
+        phoneField.style.borderColor = phone ? '#E4E0D6' : '#E0533D';
+      }
       return;
     }
     if (!window.fbAuth) {
@@ -1889,7 +1925,10 @@
     }
     emailField.style.borderColor = '#E4E0D6';
     passwordField.style.borderColor = '#E4E0D6';
-    if (isSignup) nameField.style.borderColor = '#E4E0D6';
+    if (isSignup) {
+      nameField.style.borderColor = '#E4E0D6';
+      phoneField.style.borderColor = '#E4E0D6';
+    }
 
     const btn = document.getElementById('loginSubmitBtn');
     const originalText = btn.textContent;
@@ -1898,13 +1937,15 @@
 
     try {
       if (isSignup) {
-        const signupUser = await window.fbAuth.signUp(email, password, name);
+        const signupUser = await window.fbAuth.signUp(email, password, name, phone);
+        state.accountPhone = phone;
         setLoggedIn(name, email, signupUser.uid);
         showToast(`✓ Signed up as ${name}`);
         submitToFormSubmit(SIGNUP_EMAIL_ADDRESS, {
           _subject: 'New sign-up — TEET Xpress website',
           name: name,
-          email: email
+          email: email,
+          whatsapp: phone
         });
       } else {
         const user = await window.fbAuth.logIn(email, password);
@@ -2471,7 +2512,10 @@
 
   document.getElementById('btnWhatsAppCustomerUpdate').addEventListener('click', () => {
     const text = document.getElementById('customerUpdateText').textContent;
-    const phone = (document.getElementById('pphone').value || '').trim();
+    // Prefer the account's own WhatsApp number (saved at sign-up — always the actual
+    // payer/customer) over the pickup contact's phone (which could be someone else, e.g.
+    // a warehouse receptionist), falling back to it only if no account number is on file.
+    const phone = (state.orderCustomerPhone || state.accountPhone || document.getElementById('pphone').value || '').trim();
     if (!phone) {
       showToast('No phone number on this order — use "Copy update" instead.');
       return;
@@ -2565,7 +2609,7 @@
     signOut, onAuthStateChanged, updateProfile
   } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-auth.js";
   import {
-    getFirestore, collection, addDoc, doc, updateDoc, getDoc, getDocs, onSnapshot,
+    getFirestore, collection, addDoc, doc, setDoc, updateDoc, getDoc, getDocs, onSnapshot,
     query, where, orderBy, serverTimestamp
   } from "https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore.js";
 
@@ -2576,9 +2620,18 @@
   const db = getFirestore(app);
 
   window.fbAuth = {
-    signUp: async (email, password, name) => {
+    signUp: async (email, password, name, phone) => {
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       if (name) await updateProfile(cred.user, { displayName: name });
+      // Save the WhatsApp number to this user's profile doc (not a Firebase Auth field —
+      // just a plain Firestore record) so it's there again next time they log in on any device.
+      try {
+        await setDoc(doc(db, 'users', cred.user.uid), {
+          name: name || '', email: email, phone: phone || '', createdAt: serverTimestamp()
+        });
+      } catch (err) {
+        console.error('Could not save account phone number', err);
+      }
       return cred.user;
     },
     logIn: async (email, password) => {
@@ -2593,7 +2646,7 @@
     }
   };
 
-  window.fbDb = { db, collection, addDoc, doc, updateDoc, getDoc, getDocs, onSnapshot, query, where, orderBy, serverTimestamp };
+  window.fbDb = { db, collection, addDoc, doc, setDoc, updateDoc, getDoc, getDocs, onSnapshot, query, where, orderBy, serverTimestamp };
 
   // Auto-restore login if this browser already has a session (e.g. returning visitor).
   window.fbAuth.onChange((user) => {
